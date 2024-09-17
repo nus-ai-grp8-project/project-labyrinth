@@ -38,7 +38,7 @@ class Parser:
         block_collections = []
 
         for _ , blocks in tile_config.items():
-            initial_tile = np.ones((N, N))
+            initial_tile = np.ones((3, 3))
             # All 4 corners are assumed block
             initial_tile[0, 0] = 0
             initial_tile[0, 2] = 0
@@ -50,8 +50,8 @@ class Parser:
                 initial_tile[DIRECTION[direction]] = 0
             block_collections.append(initial_tile)
         result = np.block([[block_collections[i * N + j] for j in range(N)] for i in range(N)])
-        print(f"******** GENERATING BOARD ********")
-        print(result)
+        # print(f"******** GENERATING BOARD ********")
+        # print(result)
         return result
 
     def get_board(self, filename: str | None, verbose=False):
@@ -60,9 +60,9 @@ class Parser:
         N = np.sqrt(len(tile_configs)).astype(int)
         return self.__generate_board(N, tile_config=tile_configs)
     
-if __name__ == "__main__":
-    parser = Parser()
-    parser.get_board(filename="101x101_instances_pddl/instance_0_101_by_101.pddl")
+# if __name__ == "__main__":
+#     parser = Parser()
+#     parser.get_board(filename="101x101_instances_pddl/instance_0_101_by_101.pddl")
 
         
 
