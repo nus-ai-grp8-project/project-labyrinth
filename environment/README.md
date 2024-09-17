@@ -13,7 +13,8 @@ This contains the code for a general labyrinth game relevant to CS4246
     In a say 7 x 7 matrix, the standard way of laying out the card is 
     > 0 1 2 3 4 5 6  
     > 7 8 9 10 11 12
-    > ....
+    > ....  
+    > 42 43 44 45 46 47 48  
     These are basically your card indices.
 
 
