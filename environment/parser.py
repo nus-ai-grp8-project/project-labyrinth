@@ -50,8 +50,8 @@ class Parser:
                 initial_tile[DIRECTION[direction]] = 0
             block_collections.append(initial_tile)
         result = np.block([[block_collections[i * N + j] for j in range(N)] for i in range(N)])
-        print(f"******** GENERATING BOARD ********")
-        print(result)
+        # print(f"******** GENERATING BOARD ********")
+        # print(result)
         return result
 
     def get_board(self, filename: str | None, verbose=False):
