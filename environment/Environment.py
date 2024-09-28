@@ -1,6 +1,7 @@
 import numpy as np
 from parser import Parser
 from enum import Enum
+from collections import deque
 
 class Axis(Enum):
     ROW = 1
@@ -41,9 +42,97 @@ class Environment:
         col = (card_number % self.N) * 3 + 1
         return (row, col)
     
+    def __get_card_number_from_coordinates(self, row, col):
+        return (row // 3) * self.N + (col // 3)
+    
+    def __get_card_coordinates_from_card_number(self, card_number):
+        x, y = self.__get_coordinates_from_card_number(card_number)
+        row = x // 3
+        col = y // 3
+        return (row, col)
+    
+    def is_valid_move(self, src_card_num, dest_card_num):
+        src_x, src_y = self.__get_coordinates_from_card_number(src_card_num)
+        dest_x, dest_y = self.__get_coordinates_from_card_number(dest_card_num)
 
-    def print_board_prettier(self, step=None):
-        print(f"Step: {step}")
+        # Check if source and destination are within the board
+        if src_x < 0 or src_x >= self.board.shape[0] or src_y < 0 or src_y >= self.board.shape[1]:
+            print("Invalid move: Source is out of bounds!")
+            return False
+        
+        if dest_x < 0 or dest_x >= self.board.shape[0] or dest_y < 0 or dest_y >= self.board.shape[1]:
+            print("Invalid move: Destination is out of bounds!")
+            return False
+
+        
+        # Check for walls between source and destination cards
+        if src_x == dest_x:  # Moving horizontally
+            if src_y < dest_y:  # Moving right
+                if self.board[src_x][src_y + 1] == 0 or self.board[dest_x][dest_y - 1] == 0:  # Check right border of source card
+                    print("Invalid move: Wall blocks movement to the right!")
+                    return False
+            elif src_y > dest_y:  # Moving left
+                if self.board[src_x][src_y - 1] == 0 or self.board[dest_x][dest_y + 1] == 0:  # Check left border of source card
+                    print("Invalid move: Wall blocks movement to the left!")
+                    return False
+
+        elif src_y == dest_y:  # Moving vertically
+            if src_x < dest_x:  # Moving down
+                if self.board[src_x + 1][src_y] == 0 or self.board[dest_x - 1][dest_y] == 0:  # Check bottom border of source card
+                    print("Invalid move: Wall blocks movement down!")
+                    return False
+            elif src_x > dest_x:  # Moving up
+                if self.board[src_x - 1][src_y] == 0 or self.board[dest_x + 1][dest_y] == 0:  # Check top border of source card
+                    print("Invalid move: Wall blocks movement up!")
+                    return False
+        
+        # Check if the destination is adjacent to the source (only horizontal or vertical moves allowed)
+        if not ((abs(dest_x - src_x) == 3 and dest_y == src_y) or (abs(dest_y - src_y) == 3 and dest_x == src_x)):
+            print("Invalid move: The destination is not adjacent to the source!")
+            return False
+
+        return True
+        
+    def is_path_exist(self, src_card_num, dest_card_num):
+        rows, cols = self.board.shape
+        src_x, src_y = self.__get_coordinates_from_card_number(src_card_num)
+        dest_x, dest_y = self.__get_coordinates_from_card_number(dest_card_num)
+        src = (src_x, src_y)
+        dest = (dest_x, dest_y) 
+
+        visited = np.zeros((rows, cols), dtype=bool)
+        queue = deque([src])
+
+        # All possible directions: left, right, up, down
+        directions = [("right", (0, 3)), ("left", (0, -3)), ("down", (3, 0)), ("up", (-3, 0))]
+
+
+        while queue:
+            x, y = queue.popleft()
+            if (x, y) == dest:
+                return True
+            
+            visited[x][y] = True
+
+            # Explore all four directions
+            for direction_name, (dx, dy) in directions:
+                nx, ny = x + dx, y + dy
+                src_card_num = self.__get_card_number_from_coordinates(x, y)
+                dest_card_num = self.__get_card_number_from_coordinates(nx, ny)
+                if 0 <= nx < rows and 0 <= ny < cols and not visited[nx][ny] and self.is_valid_move(src_card_num, dest_card_num):
+                    src_card_coordinates = self.__get_card_coordinates_from_card_number(src_card_num)
+                    dest_card_coordinates = self.__get_card_coordinates_from_card_number(dest_card_num)
+                    print(f"Moving from {src_card_coordinates} in {direction_name} to {dest_card_coordinates}")
+                    
+                    queue.append((nx, ny))
+
+
+        return False
+
+
+
+
+    def print_board_prettier(self):
         rows, cols = self.board.shape
         wall_char = '#'  # Represent blocked walls
         path_char = ' '  # Represent open paths
@@ -72,11 +161,20 @@ class Environment:
         print('-' * ((7 * self.N) + (self.N - 2)))  # Bottom border of the maze
 
     def move(self, src_card_num, dest_card_num):
-        src_x, src_y = self.__get_coordinates_from_card_number(src_card_num)
-        dest_x, dest_y = self.__get_coordinates_from_card_number(dest_card_num)
-        self.board[src_x][src_y] = 1
-        self.board[dest_x][dest_y] = 2
-        self.robot_loc = (dest_x, dest_y)
+        if self.is_path_exist(src_card_num, dest_card_num):
+            print("Path Exists!")
+            src_x, src_y = self.__get_coordinates_from_card_number(src_card_num)
+            dest_x, dest_y = self.__get_coordinates_from_card_number(dest_card_num)
+            self.board[src_x][src_y] = 1
+            self.board[dest_x][dest_y] = 2
+            self.robot_loc = (dest_x, dest_y)
+
+            src_card_coordinates = self.__get_card_coordinates_from_card_number(src_card_num)
+            dest_card_coordinates = self.__get_card_coordinates_from_card_number(dest_card_num)
+            print(f"Moved from {src_card_coordinates} to {dest_card_coordinates} successfully!")
+        else:
+            print("Path does not exist!")
+            
 
     def shift_cards(self, axis=Axis.ROW, dir=DIRECTION.LEFTWARDS, card_row_or_col=1):
         start_idx = 3 * card_row_or_col
@@ -85,16 +183,19 @@ class Environment:
                 assert not start_idx <= self.robot_loc[0] < start_idx + 3, "Moving Rows have robot! Not Allowed!"
                 assert(dir == DIRECTION.LEFTWARDS or dir == DIRECTION.RIGHTWARDS)
                 selected_columns = self.board[start_idx:start_idx + 3, :]
-                print("Before Shift selected column/row")
+                # print("Before Shift selected column/row")
                 print(selected_columns)
                 shifted_columns = np.roll(selected_columns, 3 if dir == DIRECTION.RIGHTWARDS else -3, axis=axis.value)
                 self.board[start_idx:start_idx + 3, :] = shifted_columns
+                print(f"Shifting Row {card_row_or_col} {dir}")
             else:
                 assert not start_idx <= self.robot_loc[1] < start_idx + 3, "Moving Columns have robot! Not Allowed!"
                 assert(dir == DIRECTION.UPWARDS or dir == DIRECTION.DOWNWARDS)
                 selected_columns = self.board[:, start_idx:start_idx + 3]
                 shifted_columns = np.roll(selected_columns, 3 if dir == DIRECTION.DOWNWARDS else -3, axis=axis.value)
-                self.board[:, start_idx:start_idx + 3] = shifted_columns
+                self.board[:, start_idx:
+                start_idx + 3] = shifted_columns
+                print(f"Shifting Column {card_row_or_col} {dir}")
         except AssertionError as e:
             print(f"Illegal Move! : {e}")
             return False
@@ -108,10 +209,12 @@ class Environment:
 
 if __name__ == "__main__":
     e = Environment(instance_file="/Users/dunliang/Downloads/cs4246-labyrinth/5x5_instances_pddl/instance_4_5_by_5.pddl")
-    e.print_board_prettier(step=1)
-    e.move(0, 7)
-    e.print_board_prettier(step=2)
-    e.shift_cards(axis=Axis.ROW, dir=DIRECTION.RIGHTWARDS, card_row_or_col=0)
-    e.print_board_prettier(step=3)
-    e.shift_cards(axis=Axis.COL, dir=DIRECTION.UPWARDS, card_row_or_col=3)
-    e.print_board_prettier(step=4)
+    e.print_board_prettier()
+    e.move(0, 2)
+    e.print_board_prettier()
+    # e.shift_cards(axis=Axis.ROW, dir=DIRECTION.RIGHTWARDS, card_row_or_col=1)
+    
+    # e.print_board_prettier(step=2)
+    # e.shift_cards(axis=Axis.COL, dir=DIRECTION.UPWARDS, card_row_or_col=3)
+    e.move(2, 15)
+    e.print_board_prettier()
