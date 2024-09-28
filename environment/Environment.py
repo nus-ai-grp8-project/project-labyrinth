@@ -41,20 +41,35 @@ class Environment:
         col = (card_number % self.N) * 3 + 1
         return (row, col)
     
-    def print_board_prettier(self):
+
+    def print_board_prettier(self, step=None):
+        print(f"Step: {step}")
         rows, cols = self.board.shape
-        print('-' *  ((7 * self.N) + (self.N - 2))) 
+        wall_char = '#'  # Represent blocked walls
+        path_char = ' '  # Represent open paths
+        robot_char = 'R'  # Represent the robot
+        goal_char = 'G'   # Represent the goal
+
+        print('-' * ((7 * self.N) + (self.N - 2)))  # Top border of the maze
         for i in range(rows):
             row_str = ''
             for j in range(cols):
-                row_str += str(int(self.board[i][j])) + ' '
+                if self.board[i][j] == 0:
+                    row_str += wall_char + ' '  
+                elif self.board[i][j] == 1:
+                    row_str += path_char + ' '  
+                elif self.board[i][j] == 2:
+                    row_str += robot_char + ' '  
+                elif self.board[i][j] == 5:
+                    row_str += goal_char + ' '  
+
                 if (j + 1) % 3 == 0 and j != cols - 1:
-                    row_str += '| '  # Add vertical separator between 3x3 segments
+                    row_str += '| '  # Vertical separators between 3x3 segments
+
             print(row_str)
             if (i + 1) % 3 == 0 and i != rows - 1:
-                print('-' *  ((7 * self.N) + (self.N - 2))) 
-        print('-' *  ((7 * self.N) + (self.N - 2))) 
-
+                print('-' * ((7 * self.N) + (self.N - 2)))  # Horizontal separators between 3x3 segments
+        print('-' * ((7 * self.N) + (self.N - 2)))  # Bottom border of the maze
 
     def move(self, src_card_num, dest_card_num):
         src_x, src_y = self.__get_coordinates_from_card_number(src_card_num)
@@ -70,6 +85,7 @@ class Environment:
                 assert not start_idx <= self.robot_loc[0] < start_idx + 3, "Moving Rows have robot! Not Allowed!"
                 assert(dir == DIRECTION.LEFTWARDS or dir == DIRECTION.RIGHTWARDS)
                 selected_columns = self.board[start_idx:start_idx + 3, :]
+                print("Before Shift selected column/row")
                 print(selected_columns)
                 shifted_columns = np.roll(selected_columns, 3 if dir == DIRECTION.RIGHTWARDS else -3, axis=axis.value)
                 self.board[start_idx:start_idx + 3, :] = shifted_columns
@@ -91,11 +107,11 @@ class Environment:
 
 
 if __name__ == "__main__":
-    e = Environment(instance_file="/Users/russelltankaimin/Desktop/python_proj/project-labyrinth/7x7_instances_pddl/instance_139_7_by_7.pddl")
-    e.print_board_prettier()
+    e = Environment(instance_file="/Users/dunliang/Downloads/cs4246-labyrinth/5x5_instances_pddl/instance_4_5_by_5.pddl")
+    e.print_board_prettier(step=1)
     e.move(0, 7)
-    e.print_board_prettier()
+    e.print_board_prettier(step=2)
     e.shift_cards(axis=Axis.ROW, dir=DIRECTION.RIGHTWARDS, card_row_or_col=0)
-    e.print_board_prettier()
+    e.print_board_prettier(step=3)
     e.shift_cards(axis=Axis.COL, dir=DIRECTION.UPWARDS, card_row_or_col=3)
-    e.print_board_prettier()
+    e.print_board_prettier(step=4)
