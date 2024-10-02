@@ -72,17 +72,11 @@ prompt_toolkit==3.0.47
 psutil==6.0.0
 ptyprocess==0.7.0
 pure_eval==0.2.3
-py-aiger==6.2.3
-py-aiger-cnf==5.0.8
-pyapproxmc==4.1.24
-pycparser==2.22
-pycryptosat==5.11.21
 Pygments==2.18.0
 pypblib==0.0.4
 pyrsistent==0.19.3
 python-dateutil==2.9.0.post0
 python-json-logger==2.0.7
-python-sat==1.8.dev13
 pytz==2024.1
 PyYAML==6.0.2
 pyzmq==26.2.0

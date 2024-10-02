@@ -1,6 +1,10 @@
 import numpy as np
-from parser import Parser
+import random
+from copy import deepcopy
+from environment.parser import Parser
 from enum import Enum
+
+DEBUG = False
 
 class Axis(Enum):
     ROW = 1
@@ -27,6 +31,159 @@ class Environment:
         self.__set_object_state_on_board()
         self.robot_loc = (1, 1)
         # print(f"Board: \n{self.board}")
+
+    def reset(self):
+        self.board = self.parser.get_board(self.instance_file)
+        self.__set_object_state_on_board()
+        self.robot_loc = (1,1)
+        print("Environment State has reset!")
+
+    def print_grid_with_edges(self):
+        n = self.N
+        adjacency_list = self.build_card_graph()
+        # Grid with n x n nodes
+        for i in range(n):
+            # Print the current row (node values and horizontal connections)
+            for j in range(n):
+                node = i * n + j  # Calculate node number based on row and column
+                
+                # Print the current node
+                print(f"{node:2}", end="")
+
+                # Check if there is a horizontal edge (right neighbor)
+                if j < n - 1:  # Not the last column
+                    right_node = node + 1
+                    if right_node in adjacency_list[node]:
+                        print(" —", end="")  # Horizontal edge
+                    else:
+                        print("  ", end="")  # No edge
+            print()  # Move to the next line
+
+            # Print vertical connections (between current and next row), except after the last row
+            if i < n - 1:
+                for j in range(n):
+                    node = i * n + j
+                    down_node = node + n  # Calculate the node below
+                    if down_node in adjacency_list[node]:
+                        print(" |  ", end="")  # Vertical edge
+                    else:
+                        print("    ", end="")  # No edge
+                print()  # Move to the next line
+
+
+
+    def build_card_graph(self):
+        board = deepcopy(self.board)
+        adj_list = {
+            i : set() for i in range(self.N * self.N)
+        }
+        for i in range(self.N * self.N):
+            row, col = self.__get_coordinates_from_card_number(i)
+            top = (row - 1, col)
+            bottom = (row + 1, col)
+            left = (row, col - 1)
+            right = (row, col + 1)
+            print(f"Testing on Card {i}") if DEBUG else None
+            # Test TOP
+            if 0 <= top[0] < self.N * 3 and 0 <= top[1] < self.N * 3 and board[top[0], top[1]] == 1:
+                if 0 <= i - self.N < self.N * self.N:
+                    row_, col_ = self.__get_coordinates_from_card_number(i - self.N)
+                    if board[row_ + 1, col_] == 1:
+                        adj_list[i].add(i - self.N)
+                        
+            
+            # Test BOTTOM
+            if 0 <= bottom[0] < self.N * 3 and 0 <= bottom[1] < self.N * 3 and board[bottom[0], bottom[1]] == 1:
+                if 0 <=  i + self.N < self.N * self.N:
+                    row_, col_ = self.__get_coordinates_from_card_number(i + self.N)
+                    print(f"Bottom coords : {bottom}") if DEBUG else None
+                    print(f"Bottom Card Top coords: {row_-1, col_}") if DEBUG else None
+                    if board[row_ - 1, col_] == 1:
+                        adj_list[i].add(i + self.N)
+                        print(f"{i} - {i + self.N}")
+
+            # Test LEFT
+            if 0 <= left[0] < self.N * 3 and 0 <= left[1] < self.N * 3 and board[left[0], left[1]] == 1:
+                if 0 <= i - 1 < self.N * self.N:
+                    row_, col_ = self.__get_coordinates_from_card_number(i - 1)
+                    if board[row_, col_ + 1] == 1:
+                        adj_list[i].add(i - 1)
+            
+            # Test RIGHT
+            if 0 <= right[0] < self.N * 3 and 0 <= right[1] < self.N * 3 and board[right[0], right[1]] == 1:
+                if 0 <= i + 1 < self.N * self.N:
+                    row_, col_ = self.__get_coordinates_from_card_number(i + 1)
+                    if board[row_, col_ - 1] == 1:
+                        adj_list[i].add(i + 1)
+            
+        return adj_list 
+
+
+    def step(self, action: int):
+
+        # Step 1 : Board moves first
+        TO_SHIFT = 2
+        shifted = 0
+        while shifted < TO_SHIFT:
+            # pick row or col to shift
+            random_axis = random.choice([Axis.ROW, Axis.COL]) # 0 for ROW, 1 for COL
+            random_idx = random.choice([i for i in range(self.N)]) # Row or col index of card
+            random_dir = random.choice([DIRECTION.LEFTWARDS, DIRECTION.RIGHTWARDS] if random_axis == Axis.ROW else [DIRECTION.UPWARDS, DIRECTION.DOWNWARDS]) # 2 for left (up) 3 for right (down)
+            if self.shift_cards(axis=random_axis, dir=random_dir, card_row_or_col=random_idx):
+                shifted += 1
+                print("Shifted!")
+
+        # Intermission: Build state_action_graph
+        adj_list = self.build_card_graph()
+        # Step 2 : Move Robot
+        robot_card_row = self.robot_loc[0] // 3
+        robot_card_col = self.robot_loc[1] // 3
+        robot_card_num = self.N * robot_card_row  + robot_card_col
+        accessible_cards = adj_list[robot_card_num]
+        match action:
+            case 1: # UP
+                if 0 <= robot_card_num < self.N:
+                    print("Nothing to move up on!")
+                else:
+                    card_dest = robot_card_num - self.N
+                    if card_dest in accessible_cards:
+                        self.move(robot_card_num, card_dest)
+                    else:
+                        print("Don't move!")
+            case 2: # DOWN
+                if self.N * self.N - self.N <= robot_card_num < self.N * self.N:
+                    print("Nothing to move down on!")
+                else:
+                    card_dest = robot_card_num + self.N
+                    if card_dest in accessible_cards:
+                        self.move(robot_card_num, card_dest)
+                    else:
+                        print("Don't move!")
+            case 3: # LEFT
+                if robot_card_num % self.N == 0:
+                    print("Nothing to move left on!")
+                else:
+                    card_dest = robot_card_num - 1
+                    if card_dest in accessible_cards:
+                        self.move(robot_card_num, card_dest)
+                    else:
+                        print("Don't move!")
+            case 4:
+                if robot_card_num % self.N == self.N - 1:
+                    print("Nothing to move right on!")
+                else:
+                    card_dest = robot_card_num + 1
+                    if card_dest in accessible_cards:
+                        self.move(robot_card_num, card_dest)
+                    else:
+                        print("Don't move!")
+            case _:
+                print("Error! Invalid Action!")
+
+        # Step 3 : Calculate Reward
+
+        # Step 4 : Check if its terminal
+
 
     def __set_object_state_on_board(self):
         x = (self.N - 1) * 3 + 1
@@ -90,12 +247,12 @@ class Environment:
 
 
 
-if __name__ == "__main__":
-    e = Environment(instance_file="/Users/russelltankaimin/Desktop/python_proj/project-labyrinth/7x7_instances_pddl/instance_139_7_by_7.pddl")
-    e.print_board_prettier()
-    e.move(0, 7)
-    e.print_board_prettier()
-    e.shift_cards(axis=Axis.ROW, dir=DIRECTION.RIGHTWARDS, card_row_or_col=0)
-    e.print_board_prettier()
-    e.shift_cards(axis=Axis.COL, dir=DIRECTION.UPWARDS, card_row_or_col=3)
-    e.print_board_prettier()
+# if __name__ == "__main__":
+#     e = Environment(instance_file="/Users/russelltankaimin/Desktop/python_proj/project-labyrinth/7x7_instances_pddl/instance_139_7_by_7.pddl")
+#     e.print_board_prettier()
+#     e.move(0, 7)
+#     e.print_board_prettier()
+#     e.shift_cards(axis=Axis.ROW, dir=DIRECTION.RIGHTWARDS, card_row_or_col=0)
+#     e.print_board_prettier()
+#     e.shift_cards(axis=Axis.COL, dir=DIRECTION.UPWARDS, card_row_or_col=3)
+#     e.print_board_prettier()
