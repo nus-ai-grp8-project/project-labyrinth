@@ -37,27 +37,35 @@ class Parser:
     def __generate_board(self, N, tile_config:dict):
         block_collections = []
 
-        for _ , blocks in tile_config.items():
+        for i in range(N * N):
             initial_tile = np.ones((3, 3))
             # All 4 corners are assumed block
             initial_tile[0, 0] = 0
             initial_tile[0, 2] = 0
             initial_tile[2, 0] = 0
             initial_tile[2, 2] = 0
-
+            if str(i) not in tile_config.keys():
+                block_collections.append(initial_tile)
+                continue
+            blocks = tile_config[str(i)]
             # Block those specified
             for direction in blocks:
                 initial_tile[DIRECTION[direction]] = 0
             block_collections.append(initial_tile)
+        # print("Length of block collections ",len(block_collections))
         result = np.block([[block_collections[i * N + j] for j in range(N)] for i in range(N)])
         # print(f"******** GENERATING BOARD ********")
-        # print(result)
         return result
 
     def get_board(self, filename: str | None, verbose=False):
+        # print(filename)
         pddl_content = self.__read_filename(filename, verbose=verbose)
+        pattern = r"\(card-at\s+(\w+)\s+(\w+)\s+(\w+)\)"
+        card_matches = re.findall(pattern, pddl_content)
         tile_configs = self.__extract_blocked_statements(pddl_content=pddl_content, verbose=False)
-        N = np.sqrt(len(tile_configs)).astype(int)
+        # print(tile_configs)
+        N = np.sqrt(len(card_matches)).astype(int)
+        # print(N)
         return self.__generate_board(N, tile_config=tile_configs)
     
 # if __name__ == "__main__":

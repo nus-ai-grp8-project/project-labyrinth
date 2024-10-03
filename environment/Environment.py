@@ -28,7 +28,7 @@ class Environment:
         self.parser = Parser()
         self.board: np.ndarray = self.parser.get_board(instance_file)
         self.N = self.board.shape[0] // 3
-        print(f"Environment and {self.N}x{self.N} Board initialised !\n")
+        print(f"Environment and {self.N}x{self.N} Board initialised !\n") if DEBUG else None
         self.__set_object_state_on_board()
         self.robot_loc = (1, 1)
         # print(f"Board: \n{self.board}")
@@ -37,7 +37,10 @@ class Environment:
         self.board = self.parser.get_board(self.instance_file)
         self.__set_object_state_on_board()
         self.robot_loc = (1,1)
-        print("Environment State has reset!")
+        print("Environment State has reset!") if DEBUG else None
+        state = np.array(self.board)
+        state = state.flatten()
+        return state
 
     def print_grid_with_edges(self):
         n = self.N
@@ -123,7 +126,7 @@ class Environment:
     def step(self, action: int):
 
         # Step 1 : Board moves first
-        TO_SHIFT = 2
+        TO_SHIFT = 1
         shifted = 0
         while shifted < TO_SHIFT:
             # pick row or col to shift
@@ -181,18 +184,21 @@ class Environment:
             case _:
                 print("Error! Invalid Action!") if DEBUG else None
 
+        state = np.array(self.board)
+        state = state.flatten()
         # Step 3 : Calculate Reward
         # BFS to find shortest path to the goal 1.) If found, then 1/(L_2 distance), else -1
          # Step 4 : Check if its terminal
         row_g, col_g, is_terminal = self.locate_goal_check_terminal()
         if is_terminal:
-            return self.board, 10, is_terminal
+            print("Goal Reached!") if DEBUG else None
+            return state, 10, is_terminal
         else:
             goal_card_row = row_g // 3
             goal_card_col = col_g // 3
             goal_card_num = self.N * goal_card_row  + goal_card_col
             _ , reward = self.bfs_to_goal(robot_card_num, goal_card_num)
-            return self.board, reward, is_terminal
+            return state, reward, is_terminal
        
 
     def bfs_to_goal(self, robot_card_num, goal_card_num):
@@ -205,7 +211,7 @@ class Environment:
             curr = fifo_q.popleft()
             visited[curr] = True
             if curr == goal_card_num:
-                return cost, 1.0/cost
+                return cost, 1
             neighbours = adj_list[curr]
             for n in neighbours:
                 if not visited[n]:
@@ -220,9 +226,9 @@ class Environment:
         x = (self.N - 1) * 3 + 1
         y = x
         self.board[x][y] = 5
-        print("Goal Set! Represented as 5")
+        print("Goal Set! Represented as 5") if DEBUG else None
         self.board[1][1] = 2
-        print("Robot Set! Represented as 2")
+        print("Robot Set! Represented as 2") if DEBUG else None
 
     def __get_coordinates_from_card_number(self, card_number):
         row = (card_number // self.N) * 3 + 1
@@ -282,7 +288,7 @@ class Environment:
                 shifted_columns = np.roll(selected_columns, 3 if dir == DIRECTION.DOWNWARDS else -3, axis=axis.value)
                 self.board[:, start_idx:start_idx + 3] = shifted_columns
         except AssertionError as e:
-            print(f"Illegal Move! : {e}")
+            print(f"Illegal Move! : {e}") if DEBUG else None
             return False
         except Exception as e:
             print(f"General Exception : {e}")
