@@ -3,6 +3,7 @@ import random
 from copy import deepcopy
 from environment.parser import Parser
 from enum import Enum
+from collections import deque
 
 DEBUG = False
 
@@ -100,7 +101,7 @@ class Environment:
                     print(f"Bottom Card Top coords: {row_-1, col_}") if DEBUG else None
                     if board[row_ - 1, col_] == 1:
                         adj_list[i].add(i + self.N)
-                        print(f"{i} - {i + self.N}")
+                        print(f"{i} - {i + self.N}") if DEBUG else None
 
             # Test LEFT
             if 0 <= left[0] < self.N * 3 and 0 <= left[1] < self.N * 3 and board[left[0], left[1]] == 1:
@@ -131,8 +132,8 @@ class Environment:
             random_dir = random.choice([DIRECTION.LEFTWARDS, DIRECTION.RIGHTWARDS] if random_axis == Axis.ROW else [DIRECTION.UPWARDS, DIRECTION.DOWNWARDS]) # 2 for left (up) 3 for right (down)
             if self.shift_cards(axis=random_axis, dir=random_dir, card_row_or_col=random_idx):
                 shifted += 1
-                print("Shifted!")
-
+                print("Shifted!") if DEBUG else None
+        print("Shifted Twice Successfully!") if DEBUG else None
         # Intermission: Build state_action_graph
         adj_list = self.build_card_graph()
         # Step 2 : Move Robot
@@ -143,46 +144,76 @@ class Environment:
         match action:
             case 1: # UP
                 if 0 <= robot_card_num < self.N:
-                    print("Nothing to move up on!")
+                    print("Nothing to move up on!") if DEBUG else None
                 else:
                     card_dest = robot_card_num - self.N
                     if card_dest in accessible_cards:
                         self.move(robot_card_num, card_dest)
                     else:
-                        print("Don't move!")
+                        print("Don't move!") if DEBUG else None
             case 2: # DOWN
                 if self.N * self.N - self.N <= robot_card_num < self.N * self.N:
-                    print("Nothing to move down on!")
+                    print("Nothing to move down on!") if DEBUG else None
                 else:
                     card_dest = robot_card_num + self.N
                     if card_dest in accessible_cards:
                         self.move(robot_card_num, card_dest)
                     else:
-                        print("Don't move!")
+                        print("Don't move!") if DEBUG else None
             case 3: # LEFT
                 if robot_card_num % self.N == 0:
-                    print("Nothing to move left on!")
+                    print("Nothing to move left on!") if DEBUG else None
                 else:
                     card_dest = robot_card_num - 1
                     if card_dest in accessible_cards:
                         self.move(robot_card_num, card_dest)
                     else:
-                        print("Don't move!")
+                        print("Don't move!") if DEBUG else None
             case 4:
                 if robot_card_num % self.N == self.N - 1:
-                    print("Nothing to move right on!")
+                    print("Nothing to move right on!") if DEBUG else None
                 else:
                     card_dest = robot_card_num + 1
                     if card_dest in accessible_cards:
                         self.move(robot_card_num, card_dest)
                     else:
-                        print("Don't move!")
+                        print("Don't move!") if DEBUG else None
             case _:
-                print("Error! Invalid Action!")
+                print("Error! Invalid Action!") if DEBUG else None
 
         # Step 3 : Calculate Reward
+        # BFS to find shortest path to the goal 1.) If found, then 1/(L_2 distance), else -1
+         # Step 4 : Check if its terminal
+        row_g, col_g, is_terminal = self.locate_goal_check_terminal()
+        if is_terminal:
+            return self.board, 10, is_terminal
+        else:
+            goal_card_row = row_g // 3
+            goal_card_col = col_g // 3
+            goal_card_num = self.N * goal_card_row  + goal_card_col
+            _ , reward = self.bfs_to_goal(robot_card_num, goal_card_num)
+            return self.board, reward, is_terminal
+       
 
-        # Step 4 : Check if its terminal
+    def bfs_to_goal(self, robot_card_num, goal_card_num):
+        adj_list = self.build_card_graph()
+        visited = [False for _ in range(self.N * self.N)]
+        fifo_q = deque()
+        fifo_q.append(robot_card_num)
+        cost = 0
+        while fifo_q:
+            curr = fifo_q.popleft()
+            visited[curr] = True
+            if curr == goal_card_num:
+                return cost, 1.0/cost
+            neighbours = adj_list[curr]
+            for n in neighbours:
+                if not visited[n]:
+                    fifo_q.append(n)
+            cost += 1
+        return cost, -1
+            
+            
 
 
     def __set_object_state_on_board(self):
@@ -207,10 +238,24 @@ class Environment:
                 row_str += str(int(self.board[i][j])) + ' '
                 if (j + 1) % 3 == 0 and j != cols - 1:
                     row_str += '| '  # Add vertical separator between 3x3 segments
+            row_str = row_str.replace("1", " ")
+            row_str = row_str.replace("0", "#")
+            row_str = row_str.replace("2", "R")
+            row_str = row_str.replace("5", "G")
             print(row_str)
             if (i + 1) % 3 == 0 and i != rows - 1:
                 print('-' *  ((7 * self.N) + (self.N - 2))) 
         print('-' *  ((7 * self.N) + (self.N - 2))) 
+
+    def locate_goal_check_terminal(self):
+        row = 0
+        col = 0
+        for i in range(len(self.board)):
+            if 5 in self.board[i]:
+                row = i
+                col = np.where(self.board[i] == 5)[0][0]
+                return row, col, False
+        return self.robot_loc[0], self.robot_loc[1], True # Robot at Goal already
 
 
     def move(self, src_card_num, dest_card_num):
@@ -227,7 +272,7 @@ class Environment:
                 assert not start_idx <= self.robot_loc[0] < start_idx + 3, "Moving Rows have robot! Not Allowed!"
                 assert(dir == DIRECTION.LEFTWARDS or dir == DIRECTION.RIGHTWARDS)
                 selected_columns = self.board[start_idx:start_idx + 3, :]
-                print(selected_columns)
+                print(selected_columns) if DEBUG else None
                 shifted_columns = np.roll(selected_columns, 3 if dir == DIRECTION.RIGHTWARDS else -3, axis=axis.value)
                 self.board[start_idx:start_idx + 3, :] = shifted_columns
             else:
