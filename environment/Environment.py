@@ -56,9 +56,9 @@ class Environment:
         print('-' *  ((7 * self.N) + (self.N - 2))) 
 
 
-    def move(self, src_card_num, dest_card_num):
-        src_x, src_y = self.__get_coordinates_from_card_number(src_card_num)
-        dest_x, dest_y = self.__get_coordinates_from_card_number(dest_card_num)
+    def move(self, dest_loc):
+        dest_x, dest_y = dest_loc
+        src_x, src_y = self.robot_loc
         self.board[src_x][src_y] = 1
         self.board[dest_x][dest_y] = 2
         self.robot_loc = (dest_x, dest_y)
