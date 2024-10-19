@@ -17,7 +17,7 @@ learning_rate = 3e-4
 # Constants
 GAMMA = 0.95
 num_steps = 1300
-max_episodes = 5000
+max_episodes = 300
 
 class ActorCritic(nn.Module):
     def __init__(self, num_inputs, num_actions, hidden_size, learning_rate=3e-4):
@@ -40,14 +40,63 @@ class ActorCritic(nn.Module):
 
         return value, policy_dist
     
+class ActorCriticConv(nn.Module):
+    def __init__(self, N,  num_actions, hidden_size, learning_rate=3e-4):
+        super(ActorCriticConv, self).__init__()
+
+        self.num_actions = num_actions
+
+        self.critic_conv1 = nn.Conv2d(in_channels=1, out_channels=16, kernel_size=3, stride=1, padding=1)  # (N, 16, N, N)
+        self.critic_conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=1, padding=1)
+
+        # Max pooling layer
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)  # Downsamples by 2
+
+        # Fully connected layer (depends on the final flattened size after convolution/pooling)
+        fc_input_size = 32 * (N // 2) * (N // 2)  # Assuming two conv layers with pooling
+        self.critic_linear_1 = nn.Linear(81, 128)  # Fully connected layer
+        self.critic_linear_2 = nn.Linear(128, hidden_size)  # Output layer for classification
+        self.critic_linear_3 = nn.Linear(hidden_size, 1)
+
+        self.actor_conv1 = nn.Conv2d(in_channels=1, out_channels=16, kernel_size=3, stride=1, padding=1)  # (N, 16, N, N)
+        self.actor_conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=1, padding=1)
+
+        # Max pooling layer
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)  # Downsamples by 2
+
+        # Fully connected layer (depends on the final flattened size after convolution/pooling)
+        fc_input_size = 32 * (N // 2) * (N // 2)  # Assuming two conv layers with pooling
+        self.actor_linear_1 = nn.Linear(81, 128)  # Fully connected layer
+        self.actor_linear_2 = nn.Linear(128, hidden_size)  # Output layer for classification
+        self.actor_linear_3 = nn.Linear(hidden_size, num_actions)
+    
+    def forward(self, state):
+        state = Variable(torch.from_numpy(state).float().unsqueeze(0))
+        value = F.relu(self.critic_conv1(state))
+        value = F.relu(self.critic_conv2(value))
+        value = torch.flatten(value, 1)
+        value = F.relu(self.critic_linear_1(value))
+        value = F.relu(self.critic_linear_2(value))
+        value = self.critic_linear_3(value)
+    
+
+        policy_dist = F.relu(self.actor_conv1(state))
+        policy_dist = F.relu(self.actor_conv2(policy_dist))
+        policy_dist = torch.flatten(policy_dist, 1)
+        policy_dist = F.relu(self.actor_linear_1(policy_dist))
+        policy_dist = F.relu(self.actor_linear_2(policy_dist))
+        policy_dist = self.actor_linear_3(policy_dist)
+        policy_dist = torch.sum(policy_dist, dim=0)
+        policy_dist = F.softmax(policy_dist, dim=0)
+
+        return value, policy_dist
+    
 def advantage_actor_critic(env, plot=False):
     num_inputs = env.N * env.N * 3 * 3
     num_outputs = 4
-
-    min_steps = 1000000
-    best_model = None
     
-    actor_critic = ActorCritic(num_inputs, num_outputs, hidden_size)
+    # actor_critic = ActorCritic(num_inputs, num_outputs, hidden_size)
+    actor_critic = ActorCriticConv(env.N, num_outputs, hidden_size)
     ac_optimizer = optim.Adam(actor_critic.parameters(), lr=learning_rate)
 
     all_lengths = []
@@ -129,24 +178,33 @@ def advantage_actor_critic(env, plot=False):
     return actor_critic
 
 if __name__ == "__main__":
-    FILENAME = "/Users/russelltankaimin/Desktop/python_proj/project-labyrinth/3x3_instances_pddl/instance_139_3_by_3.pddl"
-    env = Environment(FILENAME)
-    model = advantage_actor_critic(env, plot=True)
+    for i in range(250):
+        FILENAME = f"/Users/russelltankaimin/Desktop/python_proj/project-labyrinth/3x3_instances_pddl/instance_{i}_3_by_3.pddl"
+        env = Environment(FILENAME)
+        model = advantage_actor_critic(env)
 
-    test_env = Environment(FILENAME)
-    state = np.array(test_env.board)
-    state = state.flatten()
+        test_env = Environment(FILENAME)
+        state = np.array(test_env.board)
+        # state = state.flatten()
 
-    done = False
-    steps = 0
-    while not done:
-        _, policy_dist = model.forward(state)
-        policy_dist = policy_dist.detach().numpy() 
-        action = np.random.choice(4, p=np.squeeze(policy_dist))
-        state, reward, done = test_env.step(action + 1)
-        steps += 1
-    
-    print(f"Model solved in {steps} steps!")
+        done = False
+        steps = 0
+        while not done:
+            _, policy_dist = model.forward(state)
+            policy_dist = policy_dist.detach().numpy() 
+            action = np.random.choice(4, p=np.squeeze(policy_dist))
+            # if action + 1 == 1:
+            #     print("Move Up!")
+            # if action + 1 == 2:
+            #     print("Move Down!")
+            # if action + 1 == 3:
+            #     print("Move Left!")
+            # if action + 1 == 4:
+            #     print("Move Right!")
+            state, reward, done = test_env.step(action + 1, verbose=True)
+            steps += 1
+        
+        print(f"Model solved in {steps} steps!")
 
     # env.print_board_prettier()
     # board, reward, done = env.step(3)

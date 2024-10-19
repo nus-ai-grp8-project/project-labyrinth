@@ -19,7 +19,7 @@ class DIRECTION(Enum):
     DOWNWARDS = 3
 
 
-class Environment:
+class NashEnvironment:
     """
     The board, its representations and its actions
     """
@@ -122,7 +122,192 @@ class Environment:
                         adj_list[i].add(i + 1)
             
         return adj_list 
+    
+    def env_play_move(self, string_code):
+        # Only works for 3 x 3 instances
+        DIR = string_code[0]
+        REL_IDX = int(string_code[1]) - 1
 
+        POSSIBLE_IDX = [0, 1, 2]
+
+        if DIR in ["U", "D"]:
+            # search the REL_IDX-th free column to move
+            robot_col = self.robot_loc[1]
+            start_idx = robot_col - robot_col % 3
+            POSSIBLE_IDX.remove(start_idx // 3)
+            return self.shift_cards(axis=Axis.COL, dir=DIRECTION.DOWNWARDS if DIR == "D" else DIRECTION.UPWARDS, card_row_or_col=POSSIBLE_IDX[REL_IDX])
+        else:
+            # search the REL_IDX-th free row to move
+            robot_row = self.robot_loc[0]
+            start_idx = robot_row - robot_row % 3
+            POSSIBLE_IDX.remove(start_idx // 3)
+            return self.shift_cards(axis=Axis.ROW, dir=DIRECTION.LEFTWARDS if DIR == "L" else DIRECTION.RIGHTWARDS, card_row_or_col=POSSIBLE_IDX[REL_IDX])
+    
+    def robot_play_move(self, movement_id):
+        # we assume that the movement_id is valid
+        robot_x, robot_y = self.robot_loc
+        self.board[robot_x, robot_y] = 1
+        if movement_id == "U":
+            self.board[robot_x, robot_y - 1] = 2
+            self.robot_loc = (robot_x, robot_y - 1)
+        elif movement_id == "D":
+            self.board[robot_x, robot_y + 1] = 2
+            self.robot_loc = (robot_x, robot_y + 1)
+        elif movement_id == "L":
+            self.board[robot_x - 1, robot_y] = 2
+            self.robot_loc = (robot_x - 1, robot_y)
+        else:
+            self.board[robot_x + 1, robot_y] = 2
+            self.robot_loc = (robot_x + 1, robot_y)
+        return True
+    
+    def get_possible_moves(self, is_env=False):
+        moves = []
+        if is_env:
+            return ["D1", "D2", "U1", "U2", "L1", "L2", "R1", "R2"]
+        else:
+            x, y = self.robot_loc
+            dirs = [
+                (0, 1, "D"), (1, 0, "R"), (0, -1, "U"), (-1, 0, "L")
+            ]
+            for dir in dirs:
+                dx, dy, mv = dir
+                if 0 <= x + dx < self.N * 3 and 0 <= y + dy < self.N * 3 and self.board[x + dx, y + dy] != 0:
+                    moves.append(mv)
+            return mv
+        
+    def individual_move_bfs(self, grid):
+        # Find the starting position (position of 2) and the target position (position of 5)
+        start, target = None, None
+        rows, cols = len(grid), len(grid[0])
+        
+        for i in range(rows):
+            for j in range(cols):
+                if grid[i][j] == 2:
+                    start = (i, j)
+                if grid[i][j] == 5:
+                    target = (i, j)
+        
+        if not start or not target:
+            return (200, -200)
+        
+        # Directions for moving in the grid (up, down, left, right)
+        directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+        
+        # Queue for BFS (stores positions and the number of moves)
+        queue = deque([(start[0], start[1], 0)])  # (row, col, number of moves)
+        
+        # Set to keep track of visited positions
+        visited = set()
+        visited.add(start)
+        
+        # BFS algorithm
+        while queue:
+            row, col, moves = queue.popleft()
+            
+            # If we reach the target (position of 5), return the number of moves
+            if (row, col) == target:
+                return (-1*moves, moves)
+            
+            # Explore neighbors (up, down, left, right)
+            for dr, dc in directions:
+                new_row, new_col = row + dr, col + dc
+                
+                # Check if the new position is within bounds and not visited
+                if 0 <= new_row < rows and 0 <= new_col < cols and (new_row, new_col) not in visited:
+                    visited.add((new_row, new_col))
+                    queue.append((new_row, new_col, moves + 1))
+        
+        return (-200, 200)
+        
+    def get_payoff_map(self, possible_moves, is_env_turn):
+        payoff_map = dict()
+        for mv in possible_moves:
+            # mv here is a ("L", ...) or ("D1", "D2", ...)
+            board = deepcopy(self.board)
+            if is_env_turn:
+                # move env first
+                direction = mv[0]
+                rel_idx = int(mv[1]) - 1
+                POSSIBLE_IDX = [0, 1, 2]
+                print(direction, rel_idx)
+                if direction in ["U", "D"]:
+                    # search the REL_IDX-th free column to move
+                    robot_col = self.robot_loc[1]
+                    start_idx = robot_col - robot_col % 3
+                    POSSIBLE_IDX.remove(start_idx // 3)
+                    # print(f"Removed {start_idx // 3}")
+                    start_idx = POSSIBLE_IDX[rel_idx] * 3
+                    selected_columns = board[:, start_idx:start_idx + 3]
+                    shifted_columns = np.roll(selected_columns, 3 if direction == "D" else -3, axis=Axis.COL.value)
+                    board[:, start_idx:start_idx + 3] = shifted_columns
+                else:
+                    # search the REL_IDX-th free row to move
+                    robot_row = self.robot_loc[0]
+                    start_idx = robot_row - robot_row % 3
+                    POSSIBLE_IDX.remove(start_idx // 3)
+                    start_idx = POSSIBLE_IDX[rel_idx] * 3
+                    selected_columns = board[start_idx:start_idx + 3, :]
+                    print(selected_columns) if DEBUG else None
+                    shifted_columns = np.roll(selected_columns, 3 if direction == "R" else -3, axis=Axis.ROW.value)
+                    board[start_idx:start_idx + 3, :] = shifted_columns
+
+                # move robot
+                # Need to check if the move is still valid
+                x, y = self.robot_loc
+                dirs = [
+                    (0, 1, "D"), (1, 0, "R"), (0, -1, "U"), (-1, 0, "L")
+                ]
+                for dir in dirs:
+                    dx, dy, mv_ = dir
+                    if 0 <= x + dx < self.N * 3 and 0 <= y + dy < self.N * 3 and board[x + dx, y + dy] != 0:
+                        board[x, y] = 1
+                        board[x + dx, y + dy] = 2
+                        payoff_map[(mv_, mv)] = self.individual_move_bfs(board)
+                        board[x, y] = 2
+                        board[x + dx, y + dy] = 1
+
+            else:
+                # move robot first
+                x, y = self.robot_loc
+                dirs = [
+                    (0, 1, "D"), (1, 0, "R"), (0, -1, "U"), (-1, 0, "L")
+                ]
+                for dir in dirs:
+                    dx, dy, mv = dir
+                    if 0 <= x + dx < self.N * 3 and 0 <= y + dy < self.N * 3 and board[x + dx, y + dy] != 0:
+                        env_moves = ["D1", "D2", "U1", "U2", "L1", "L2", "R1", "R2"]
+                        for e_m in env_moves:
+                            board1 = deepcopy(board)
+                            board1[x, y] = 1
+                            board1[x + dx, y + dy] = 2
+                            robot_loc = (x + dx, y + dy)
+                            direction = e_m[0]
+                            rel_idx = int(e_m[1]) - 1
+                            POSSIBLE_IDX = [0, 1, 2]
+
+                            if direction in ["U", "D"]:
+                                # search the REL_IDX-th free column to move
+                                robot_col = robot_loc[1]
+                                start_idx = robot_col - robot_col % 3
+                                POSSIBLE_IDX.remove(start_idx // 3)
+                                start_idx = POSSIBLE_IDX[rel_idx] * 3
+                                selected_columns = board1[:, start_idx:start_idx + 3]
+                                shifted_columns = np.roll(selected_columns, 3 if direction == "D" else -3, axis=Axis.COL.value)
+                                board1[:, start_idx:start_idx + 3] = shifted_columns
+                            else:
+                                # search the REL_IDX-th free row to move
+                                robot_row = robot_loc[0]
+                                start_idx = robot_row - robot_row % 3
+                                POSSIBLE_IDX.remove(start_idx // 3)
+                                start_idx = POSSIBLE_IDX[rel_idx] * 3
+                                selected_columns = board1[start_idx:start_idx + 3, :]
+                                print(selected_columns) if DEBUG else None
+                                shifted_columns = np.roll(selected_columns, 3 if direction == "R" else -3, axis=Axis.ROW.value)
+                                board1[start_idx:start_idx + 3, :] = shifted_columns
+
+                            payoff_map[(mv, e_m)] = self.individual_move_bfs(board1)
+        return payoff_map
 
     def step(self, action: int, verbose=False):
 
