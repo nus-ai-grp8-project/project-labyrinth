@@ -76,51 +76,18 @@ class Environment:
 
 
 
-    # def build_card_graph(self):
-    #     board = deepcopy(self.board)
-    #     adj_list = {
-    #         i : set() for i in range(self.N * self.N)
-    #     }
-    #     for i in range(self.N * self.N):
-    #         row, col = self.__get_coordinates_from_card_number(i)
-    #         top = (row - 1, col)
-    #         bottom = (row + 1, col)
-    #         left = (row, col - 1)
-    #         right = (row, col + 1)
-    #         print(f"Testing on Card {i}") if DEBUG else None
-    #         # Test TOP
-    #         if 0 <= top[0] < self.N * 3 and 0 <= top[1] < self.N * 3 and board[top[0], top[1]] == 1:
-    #             if 0 <= i - self.N < self.N * self.N:
-    #                 row_, col_ = self.__get_coordinates_from_card_number(i - self.N)
-    #                 if board[row_ + 1, col_] == 1:
-    #                     adj_list[i].add(i - self.N)
-                        
-            
-    #         # Test BOTTOM
-    #         if 0 <= bottom[0] < self.N * 3 and 0 <= bottom[1] < self.N * 3 and board[bottom[0], bottom[1]] == 1:
-    #             if 0 <=  i + self.N < self.N * self.N:
-    #                 row_, col_ = self.__get_coordinates_from_card_number(i + self.N)
-    #                 print(f"Bottom coords : {bottom}") if DEBUG else None
-    #                 print(f"Bottom Card Top coords: {row_-1, col_}") if DEBUG else None
-    #                 if board[row_ - 1, col_] == 1:
-    #                     adj_list[i].add(i + self.N)
-    #                     print(f"{i} - {i + self.N}") if DEBUG else None
-
-    #         # Test LEFT
-    #         if 0 <= left[0] < self.N * 3 and 0 <= left[1] < self.N * 3 and board[left[0], left[1]] == 1:
-    #             if 0 <= i - 1 < self.N * self.N:
-    #                 row_, col_ = self.__get_coordinates_from_card_number(i - 1)
-    #                 if board[row_, col_ + 1] == 1:
-    #                     adj_list[i].add(i - 1)
-            
-    #         # Test RIGHT
-    #         if 0 <= right[0] < self.N * 3 and 0 <= right[1] < self.N * 3 and board[right[0], right[1]] == 1:
-    #             if 0 <= i + 1 < self.N * self.N:
-    #                 row_, col_ = self.__get_coordinates_from_card_number(i + 1)
-    #                 if board[row_, col_ - 1] == 1:
-    #                     adj_list[i].add(i + 1)
-            
-    #     return adj_list 
+    def shift_board(self, TO_SHIFT=1):
+        shifted = 0
+        while shifted < TO_SHIFT:
+            # pick row or col to shift
+            random_axis = random.choice([Axis.ROW, Axis.COL]) # 0 for ROW, 1 for COL
+            random_idx = random.choice([i for i in range(self.N)]) # Row or col index of card
+            random_dir = random.choice([DIRECTION.LEFTWARDS, DIRECTION.RIGHTWARDS] if random_axis == Axis.ROW else [DIRECTION.UPWARDS, DIRECTION.DOWNWARDS]) # 2 for left (up) 3 for right (down)
+            if self.shift_cards(axis=random_axis, dir=random_dir, card_row_or_col=random_idx):
+                shifted += 1
+                print("Shifted!") if DEBUG else None
+        print("Shifted Successfully!") if DEBUG else None
+        self.print_board_prettier() if DEBUG else None
 
     def build_card_graph(self):
         board = deepcopy(self.board)
@@ -178,23 +145,23 @@ class Environment:
         print(adj_list) if DEBUG else None
         return adj_list 
 
+    def update_goal_location(self):
+        # Check if the goal has been shifted to a new position
+        for row in range(self.board.shape[0]):
+            for col in range(self.board.shape[1]):
+                if self.board[row][col] == 5:  # Assuming 5 represents the goal
+                    self.goal_loc = (row, col)
+                    print(f"Goal location updated to: {self.goal_loc}") if DEBUG else None
+                    return
 
     def step(self, action):
 
         # # Step 1 : Board moves first
-        # TO_SHIFT = 1
-        # shifted = 0
-        # while shifted < TO_SHIFT:
-        #     # pick row or col to shift
-        #     random_axis = random.choice([Axis.ROW, Axis.COL]) # 0 for ROW, 1 for COL
-        #     random_idx = random.choice([i for i in range(self.N)]) # Row or col index of card
-        #     random_dir = random.choice([DIRECTION.LEFTWARDS, DIRECTION.RIGHTWARDS] if random_axis == Axis.ROW else [DIRECTION.UPWARDS, DIRECTION.DOWNWARDS]) # 2 for left (up) 3 for right (down)
-        #     if self.shift_cards(axis=random_axis, dir=random_dir, card_row_or_col=random_idx):
-        #         shifted += 1
-        #         print("Shifted!") if DEBUG else None
-        # print("Shifted Twice Successfully!") if DEBUG else None
+        self.shift_board(TO_SHIFT=1)
         # Intermission: Build state_action_graph
         
+        # Update the goal location if it was shifted
+        self.update_goal_location()
 
         # if not self.shift_cards(axis=axis, dir=shift_dir, card_row_or_col=shift_index):
         #     print("Illegal Shift!") if DEBUG else None
@@ -205,6 +172,17 @@ class Environment:
         robot_card_row = self.robot_loc[0] // 3
         robot_card_col = self.robot_loc[1] // 3
         robot_card_num = self.N * robot_card_row  + robot_card_col
+
+
+        while not adj_list[robot_card_num]:
+            # Randomly shift the card again if no possible moves
+            self.shift_board(TO_SHIFT=1)
+            self.update_goal_location()
+            adj_list = self.build_card_graph()
+            robot_card_row = self.robot_loc[0] // 3
+            robot_card_col = self.robot_loc[1] // 3
+            robot_card_num = self.N * robot_card_row + robot_card_col
+
         accessible_cards = adj_list[robot_card_num]
         
 
@@ -271,7 +249,7 @@ class Environment:
                         print("Don't move!") if DEBUG else None
             
             case _:
-                print(f"Action {action} not found")
+                print(f"Action {action} not found") if DEBUG else None
                 print("Error! Invalid Action!") if DEBUG else None
                 return None, -10, False
 
@@ -284,7 +262,7 @@ class Environment:
         print("Is Terminal State:", is_terminal) if DEBUG else None
         if is_terminal:
             print("Goal Reached!") if DEBUG else None
-            return state, 1, is_terminal
+            return state, 10000, is_terminal
         else:
             goal_card_row = row_g // 3
             goal_card_col = col_g // 3
@@ -294,23 +272,6 @@ class Environment:
             return state, reward, is_terminal
        
 
-    # def bfs_to_goal(self, robot_card_num, goal_card_num):
-    #     adj_list = self.build_card_graph()
-    #     visited = [False for _ in range(self.N * self.N)]
-    #     fifo_q = deque()
-    #     fifo_q.append(robot_card_num)
-    #     cost = 0
-    #     while fifo_q:
-    #         curr = fifo_q.popleft()
-    #         visited[curr] = True
-    #         if curr == goal_card_num:
-    #             return cost, 1
-    #         neighbours = adj_list[curr]
-    #         for n in neighbours:
-    #             if not visited[n]:
-    #                 fifo_q.append(n)
-    #         cost += 1
-    #     return cost, -1
     def bfs_to_goal(self, robot_card_num, goal_card_num):
         adj_list = self.build_card_graph()
         visited = [False for _ in range(self.N * self.N)]
@@ -379,33 +340,7 @@ class Environment:
         else:
             return self.goal_loc[0], self.goal_loc[1], False
  
-    # def locate_goal_check_terminal(self):
-    #     row = 0
-    #     col = 0
-    #     for i in range(len(self.board)):
-    #         if 5 in self.board[i]:
-    #             row = i
-    #             col = np.where(self.board[i] == 5)[0][0]
-    #             return row, col, False
-    #     return self.robot_loc[0], self.robot_loc[1], True # Robot at Goal already
 
-    # def move(self, src_loc, dest_loc):
-    #     src_x, src_y = src_loc
-    #     dest_x, dest_y = dest_loc
-        
-    #     # Restore the source cell
-    #     if self.board[src_x][src_y] == 2:
-    #         self.board[src_x][src_y] = 1
-    #     elif self.board[src_x][src_y] == 7:
-    #         self.board[src_x][src_y] = 5  # Robot was on the goal
-
-    #     # Update the destination cell
-    #     if self.board[dest_x][dest_y] == 5:
-    #         self.board[dest_x][dest_y] = 7  # Robot on the goal
-    #     else:
-    #         self.board[dest_x][dest_y] = 2
-    #     self.robot_loc = (dest_x, dest_y)
-    #     self.print_board_prettier()
     def move(self, src_loc, dest_loc):
         src_x, src_y = src_loc
         dest_x, dest_y = dest_loc
@@ -414,12 +349,7 @@ class Environment:
         self.robot_loc = (dest_x, dest_y)
         print("Move from ", src_loc, " to ", dest_loc) if DEBUG else None
         # self.print_board_prettier()
-    # def move(self, src_card_num, dest_card_num):
-    #     src_x, src_y = self.__get_coordinates_from_card_number(src_card_num)
-    #     dest_x, dest_y = self.__get_coordinates_from_card_number(dest_card_num)
-    #     self.board[src_x][src_y] = 1
-    #     self.board[dest_x][dest_y] = 2
-    #     self.robot_loc = (dest_x, dest_y)
+
 
     def shift_cards(self, axis=Axis.ROW, dir=DIRECTION.LEFTWARDS, card_row_or_col=1):
         start_idx = 3 * card_row_or_col

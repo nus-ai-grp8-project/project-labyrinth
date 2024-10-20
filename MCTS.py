@@ -3,6 +3,7 @@ from environment.Environment import Environment, Axis, DIRECTION
 import numpy as np
 import math
 import copy
+import os
 
 class MCTSNode:
     def __init__(self, state, parent=None, action=None):
@@ -15,20 +16,22 @@ class MCTSNode:
 
     def is_fully_expanded(self):
         return len(self.children) == len(self.state.get_possible_actions())
-        # return len(self.children) == 0
+
     
-    # def best_child(self, exploration_weight=1.4):
-    #     if len(self.children) == 0:
-    #         raise ValueError("No children found to select the best child from.")
-    #     choices_weights = [
-    #         (child.reward / (child.visits+ 1e-6)) + exploration_weight * math.sqrt(math.log(self.visits + 1) / (child.visits + 1e-6))
-    #         for child in self.children
-    #     ]
-    #     return self.children[np.argmax(choices_weights)]
+
     
     def best_child(self, exploration_weight=1.4):
         if len(self.children) == 0:
-            raise ValueError("No children found to select the best child from.")
+            while len(self.state.get_possible_actions()) == 0:
+                self.state.environment.shift_board(TO_SHIFT=1)
+            self.state.environment.update_goal_location()
+
+            possible_actions = self.state.get_possible_actions()
+            for action in possible_actions:
+                next_state = self.state.take_action(action)
+                child_node = MCTSNode(state=next_state, parent=self)
+                self.children.append(child_node)
+            # raise ValueError("No children found to select the best child from.")
         
         # Calculate UCT values with a heuristic component to prefer states closer to the goal
         choices_weights = []
@@ -43,6 +46,9 @@ class MCTSNode:
                 0.5 * heuristic  # Weight for the heuristic
             )
             choices_weights.append(uct_value)
+            if not choices_weights:
+                return None  # or handle accordingly
+
 
         return self.children[np.argmax(choices_weights)]
 
@@ -66,7 +72,7 @@ class MCTSNode:
         self.visits += 1
         self.reward += reward
         current_card_number = self.state.get_current_card()
-        print(f"Backpropagating - Node reward: {self.reward}, Visits: {self.visits}, Current State: {current_card_number}")
+        # print(f"Backpropagating - Node reward: {self.reward}, Visits: {self.visits}, Current State: {current_card_number}")
         if self.parent:
             self.parent.backpropagate(reward)
 
@@ -94,42 +100,12 @@ class MCTSAgent:
             if not node.is_fully_expanded():
                 return node.expand()
             else:
+            # Ensure the node has children before attempting to select the best one
+                if len(node.children) == 0:
+                    return node  # Stop here if no children are available, to avoid raising an error
                 node = node.get_best_child()
         return node
     
-    # def rollout(self, state, max_depth=50):
-    #     current_state = state
-    #     depth = 0
-    #     # print("--------------------")
-    #     # print("Current State: ", current_state.robot_loc, current_state.goal_loc)
-    #     while not current_state.is_terminal() and depth < max_depth:
-    #         print("Current Depth: ", depth)
-    #         possible_actions = current_state.get_possible_actions()
-    #         print("Possible actions: ", possible_actions)
-    #         if not possible_actions:
-    #             break
-    #         action = random.choice(possible_actions)
-    #         current_state = current_state.take_action(action)
-    #         depth += 1
-    #         print("Actions taken during rollout: ", action)
-    #     return current_state.get_reward()
-    # def rollout(self, state, max_depth=10):
-    #     current_state = state
-    #     depth = 0
-    #     total_reward = 0
-    #     while not current_state.is_terminal() and depth < max_depth:
-    #         possible_actions = current_state.get_possible_actions()
-    #         if not possible_actions:
-    #             break
-    #         action = random.choice(possible_actions)
-    #         next_state = current_state.take_action(action)
-    #         if next_state is None:
-    #             # Skip illegal actions
-    #             continue
-    #         total_reward += next_state.get_reward()
-    #         current_state = next_state
-    #         depth += 1
-    #     return total_reward
 
 
     def rollout(self, state, max_depth=10):
@@ -154,19 +130,6 @@ class MCTSAgent:
     def rollout_policy(self, possible_actions):
         return possible_actions[np.random.randint(len(possible_actions))]
 
-    # def choose_action_towards_goal(self, state, possible_actions):
-    #     # Use Manhattan distance or any other heuristic to pick action closer to the goal
-    #     best_action = None
-    #     min_distance = float('inf')
-    #     for action in possible_actions:
-    #         next_state = state.take_action(action)
-    #         if next_state is None:
-    #             continue
-    #         distance = abs(next_state.robot_loc[0] - next_state.goal_loc[0]) + abs(next_state.robot_loc[1] - next_state.goal_loc[1])
-    #         if distance < min_distance:
-    #             min_distance = distance
-    #             best_action = action
-    #     return best_action if best_action else random.choice(possible_actions)
     
 class MCTSGameState:
     """
@@ -224,17 +187,40 @@ class MCTSGameState:
         card_number = (robot_row // 3) * self.environment.N + (robot_col // 3)
         return card_number
 
+    # def take_action(self, action):
+    #     new_env = copy.deepcopy(self.environment)
+    #     # print("Action taken: ", action)
+    #     state, reward, is_terminal = new_env.step(action)
+    #     self.reward = reward
+    #     self.is_terminal_state = is_terminal
+    #     if state is None:
+    #         # Handle illegal action
+    #         return None
+    #     new_robot_loc = new_env.robot_loc
+    #     return MCTSGameState(new_env, new_robot_loc, self.goal_loc, reward, is_terminal)
     def take_action(self, action):
         new_env = copy.deepcopy(self.environment)
-        # print("Action taken: ", action)
+
+        # Perform a random card shift before taking action
+        TO_SHIFT = 1
+        shifted = 0
+        while shifted < TO_SHIFT:
+            random_axis = random.choice([Axis.ROW, Axis.COL])
+            random_idx = random.choice([i for i in range(new_env.N)])
+            random_dir = random.choice([DIRECTION.LEFTWARDS, DIRECTION.RIGHTWARDS] if random_axis == Axis.ROW else [DIRECTION.UPWARDS, DIRECTION.DOWNWARDS])
+            if new_env.shift_cards(axis=random_axis, dir=random_dir, card_row_or_col=random_idx):
+                shifted += 1
+        new_env.update_goal_location()
+
+        # Take the robot movement action
         state, reward, is_terminal = new_env.step(action)
-        self.reward = reward
-        self.is_terminal_state = is_terminal
         if state is None:
             # Handle illegal action
             return None
         new_robot_loc = new_env.robot_loc
-        return MCTSGameState(new_env, new_robot_loc, self.goal_loc, reward, is_terminal)
+
+        return MCTSGameState(new_env, new_robot_loc, new_env.goal_loc, reward, is_terminal)
+
 
     def is_terminal(self):
         return self.is_terminal_state
@@ -282,71 +268,123 @@ class MCTSGameState:
 
 
 if __name__ == "__main__":
-
-    environment = Environment(instance_file="/Users/dunliang/Downloads/cs4246-labyrinth/3x3_instances_pddl/instance_4_3_by_3.pddl")
-    initial_state = MCTSGameState(environment, environment.robot_loc, (environment.N - 1, environment.N - 1))
-    # agent = MCTSAgent(environment, num_simulations=500)
     
-    agent = MCTSAgent(environment, num_simulations=5)
+    
+    # environment = Environment(instance_file="/Users/dunliang/Downloads/cs4246-labyrinth/3x3_instances_pddl/instance_3_3_by_3.pddl")
+    # initial_state = MCTSGameState(environment, environment.robot_loc, (environment.N - 1, environment.N - 1))
+    # # agent = MCTSAgent(environment, num_simulations=500)
+    
+    # agent = MCTSAgent(environment, num_simulations=10)
 
-    environment.print_board_prettier()
-    current_state = initial_state
-    is_terminal = current_state.is_terminal()  # Start with checking if the initial state is terminal (should be False)
+    # environment.print_board_prettier()
+    # current_state = initial_state
+    # is_terminal = current_state.is_terminal()  # Start with checking if the initial state is terminal (should be False)
 
-    actions_taken = []
+    # actions_taken = []
 
-    best_node = agent.search(current_state)
-    # if best_node:
-    #     best_action = best_node.action
-    #     actions_taken.append(best_action)  # Store the action
-    #     print("Best action found by MCTS: ", best_action.__str__())
-    #     best_action_index = best_action[1].value
+    # best_node = agent.search(current_state)
 
-    #     # Apply the best action to the real environment
-    #     state, reward, is_terminal = environment.step(best_action_index)
+    # while not is_terminal:
+    #     # Use MCTS to find the best action from the current state
+    #     best_node = agent.search(current_state)
 
-    #     # Update the current state after applying the action
-    #     current_state = MCTSGameState(environment, environment.robot_loc, (environment.N - 1, environment.N - 1))
-        
-    #     # Print the board after each move
-    #     environment.print_board_prettier()
+    #     if best_node:
+    #         best_action = best_node.action
+    #         actions_taken.append(best_action)  # Store the action
+    #         print("Best action found by MCTS: ", best_action)
 
+    #         # Apply the best action to the real environment
+    #         state, reward, is_terminal = environment.step(best_action)
 
-    # if best_node:
-    #     best_action = best_node.action
-    #     actions_taken.append(best_action)
-    #     print("Best action found by MCTS: ", best_action)
-    #     state, reward, is_terminal = environment.step(best_action)
-    #     current_state = MCTSGameState(environment, environment.robot_loc, (environment.N - 1, environment.N - 1))
-    #     # environment.print_board_prettier()
+    #         # Update the current state after applying the action
+    #         current_state = MCTSGameState(environment, environment.robot_loc, environment.goal_loc)
+    #         environment.print_board_prettier() 
+    #     else:
+    #         print("No valid action found by MCTS.")
+    #         break  # If no valid action is found, exit the loop
 
-
-    while not is_terminal:
-        # Use MCTS to find the best action from the current state
-        best_node = agent.search(current_state)
-
-        if best_node:
-            best_action = best_node.action
-            actions_taken.append(best_action)  # Store the action
-            print("Best action found by MCTS: ", best_action)
-
-            # Apply the best action to the real environment
-            state, reward, is_terminal = environment.step(best_action)
-
-            # Update the current state after applying the action
-            current_state = MCTSGameState(environment, environment.robot_loc, environment.goal_loc)
-            environment.print_board_prettier() 
-        else:
-            print("No valid action found by MCTS.")
-            break  # If no valid action is found, exit the loop
-
-    # After exiting the loop, check if the goal was reached
-    if is_terminal:
-        print("Goal reached successfully!")
-        print("Sequence of actions to reach the goal:")
-        for idx, action in enumerate(actions_taken):
-            print(f"Step {idx + 1}: {action}")
-    else:
-        print("Failed to reach the goal.")
+    # # After exiting the loop, check if the goal was reached
+    # if is_terminal:
+    #     print("Goal reached successfully!")
+    #     print("Sequence of actions to reach the goal:")
+    #     for idx, action in enumerate(actions_taken):
+    #         print(f"Step {idx + 1}: {action}")
+    # else:
+    #     print("Failed to reach the goal.")
 
     
+## Can try to run the same maze multiple times and use the average of the steps required to 
+# reach the goal as a metric to compare the performance of the MCTS agent with the random agent.
+
+
+
+    # Path to the folder containing all 3x3 maze instances
+    instances_path = "/Users/dunliang/Downloads/cs4246-labyrinth/7x7_instances_pddl/"
+
+    # Number of times to test all the mazes
+    NUM_TESTS = 10
+    STARTING_INSTANCE = 0
+    ENDING_INSTANCE = 1
+
+    
+    # Create or open the results file for writing
+    with open("7x7_result.txt", "a") as result_file:
+        # Iterate over all the instance files in the directory
+        result_file.write(f"Results for instances {STARTING_INSTANCE} to {ENDING_INSTANCE}:\n")
+        for instance_num in range(STARTING_INSTANCE, ENDING_INSTANCE + 1):  # Assuming instances are from 0 to 249
+            instance_file = os.path.join(instances_path, f"instance_{instance_num}_7_by_7.pddl")
+            print(f"Testing instance: {instance_file}")
+            
+            # List to store steps taken for each test run for this instance
+            steps_taken_list = []
+
+            # Iterate over the number of tests
+            for test_run in range(1, NUM_TESTS + 1):
+                # Initialize the environment and the initial state
+                environment = Environment(instance_file=instance_file)
+                initial_state = MCTSGameState(environment, environment.robot_loc, (environment.N - 1, environment.N - 1))
+                agent = MCTSAgent(environment, num_simulations=10)
+
+                # Set up the initial conditions
+                current_state = initial_state
+                is_terminal = current_state.is_terminal()
+                actions_taken = []
+
+                # Run MCTS until the goal is reached or no valid action is found
+                while not is_terminal:
+                    best_node = agent.search(current_state)
+
+                    if best_node:
+                        best_action = best_node.action
+                        actions_taken.append(best_action)
+
+                        # Apply the best action to the real environment
+                        state, reward, is_terminal = environment.step(best_action)
+
+                        # Update the current state after applying the action
+                        current_state = MCTSGameState(environment, environment.robot_loc, environment.goal_loc)
+                    else:
+                        break
+
+                # Record the number of steps taken for this test run
+                steps_taken_list.append(len(actions_taken))
+
+                # # Record the result for this instance and test run
+                # if is_terminal:
+                #     result_file.write(f"Instance {instance_num}, Test Run {test_run}: Goal reached in {len(actions_taken)} steps.\n")
+                # else:
+                #     result_file.write(f"Instance {instance_num}, Test Run {test_run}: Failed to reach the goal.\n")
+            
+
+            # Calculate the average steps taken for this instance across all test runs
+            if steps_taken_list:
+                average_steps = sum(steps_taken_list) / len(steps_taken_list)
+                # result_file.write(f"Instance {instance_num}: Average steps taken across {NUM_TESTS} test runs: {average_steps:.2f}\n")
+                result_file.write(f"{average_steps:.2f}")
+            else:
+                result_file.write(f"Instance {instance_num}: No valid runs were completed.\n")
+
+            # Separate instances in the result file for readability
+            result_file.write("\n")
+
+    print("All instances have been tested and results are recorded in '7x7_result.txt'.")
