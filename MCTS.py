@@ -319,20 +319,21 @@ if __name__ == "__main__":
 
 
     # Path to the folder containing all 3x3 maze instances
-    instances_path = "/Users/dunliang/Downloads/cs4246-labyrinth/7x7_instances_pddl/"
+    instances_path = "/Users/dunliang/Downloads/cs4246-labyrinth/3x3_instances_pddl/"
 
     # Number of times to test all the mazes
     NUM_TESTS = 10
     STARTING_INSTANCE = 0
-    ENDING_INSTANCE = 1
+    ENDING_INSTANCE = 55
+    NUM_SIMULATIONS = 30
 
     
     # Create or open the results file for writing
-    with open("7x7_result.txt", "a") as result_file:
+    with open("3x3_result.txt", "a") as result_file:
         # Iterate over all the instance files in the directory
-        result_file.write(f"Results for instances {STARTING_INSTANCE} to {ENDING_INSTANCE}:\n")
+        result_file.write(f"Results for instances {STARTING_INSTANCE} to {ENDING_INSTANCE} with simulations {NUM_SIMULATIONS}:\n")
         for instance_num in range(STARTING_INSTANCE, ENDING_INSTANCE + 1):  # Assuming instances are from 0 to 249
-            instance_file = os.path.join(instances_path, f"instance_{instance_num}_7_by_7.pddl")
+            instance_file = os.path.join(instances_path, f"instance_{instance_num}_3_by_3.pddl")
             print(f"Testing instance: {instance_file}")
             
             # List to store steps taken for each test run for this instance
@@ -343,7 +344,7 @@ if __name__ == "__main__":
                 # Initialize the environment and the initial state
                 environment = Environment(instance_file=instance_file)
                 initial_state = MCTSGameState(environment, environment.robot_loc, (environment.N - 1, environment.N - 1))
-                agent = MCTSAgent(environment, num_simulations=10)
+                agent = MCTSAgent(environment, num_simulations=NUM_SIMULATIONS)
 
                 # Set up the initial conditions
                 current_state = initial_state
@@ -387,4 +388,4 @@ if __name__ == "__main__":
             # Separate instances in the result file for readability
             result_file.write("\n")
 
-    print("All instances have been tested and results are recorded in '7x7_result.txt'.")
+    print("All instances have been tested and results are recorded in '3x3_result.txt'.")
